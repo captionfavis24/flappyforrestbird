@@ -8,36 +8,36 @@ pygame.init()
 WIDTH = 500
 HEIGHT = 700
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Lidojošais meža putns")
+pygame.display.set_caption("Flappy Forest Bird")
 
 clock = pygame.time.Clock()
 FPS = 60
 
-SKY_TOP = (105, 190, 255)
-SKY_BOTTOM = (190, 230, 255)
-GREEN = (75, 190, 95)
-DARK_GREEN = (25, 130, 55)
-PIPE_GREEN = (35, 155, 70)
-PIPE_LIGHT = (90, 220, 120)
-YELLOW = (255, 220, 70)
-ORANGE = (255, 145, 35)
+SKY_TOP = (85, 180, 255)
+SKY_BOTTOM = (205, 240, 255)
 WHITE = (255, 255, 255)
-BLACK = (20, 25, 30)
-RED = (230, 55, 55)
-DARK_BLUE = (25, 55, 85)
-CARD = (245, 250, 255)
+BLACK = (18, 24, 32)
+DARK_BLUE = (24, 54, 86)
+SOFT_BLUE = (226, 244, 255)
+GREEN = (74, 190, 92)
+DARK_GREEN = (24, 128, 55)
+GRASS_DARK = (25, 115, 45)
+GRASS_LIGHT = (110, 230, 120)
+PIPE_GREEN = (31, 154, 74)
+PIPE_LIGHT = (112, 235, 139)
+RED = (235, 70, 70)
 
 font_title = pygame.font.SysFont("arial", 42, bold=True)
 font_big = pygame.font.SysFont("arial", 46, bold=True)
 font_medium = pygame.font.SysFont("arial", 28, bold=True)
 font_small = pygame.font.SysFont("arial", 21)
-font_tiny = pygame.font.SysFont("arial", 17)
+font_tiny = pygame.font.SysFont("arial", 16)
 
-HIGH_SCORE_FILE = "labakais.txt"
+HIGH_SCORE_FILE = "highscore.txt"
 
 bird_x = 100
 bird_y = HEIGHT // 2
-bird_radius = 20
+bird_radius = 24
 bird_velocity = 0
 gravity = 0.5
 jump_strength = -8
@@ -52,6 +52,10 @@ high_score = 0
 game_over = False
 started = False
 selected_mode = None
+ground_scroll = 0
+
+bird_img = pygame.image.load("bird.png").convert_alpha()
+bird_img = pygame.transform.scale(bird_img, (58, 58))
 
 
 def load_high_score():
@@ -72,30 +76,25 @@ def save_high_score():
 def apply_difficulty():
     global pipe_speed, pipe_gap, gravity
 
-    if selected_mode == "viegls":
+    if selected_mode == "Easy":
         pipe_speed = 3
         pipe_gap = 210
         gravity = 0.45
 
-    elif selected_mode == "vidējs":
+    elif selected_mode == "Medium":
         pipe_speed = 4
         pipe_gap = 180
         gravity = 0.5
 
-    elif selected_mode == "grūts":
+    elif selected_mode == "Hard":
         pipe_speed = 5
         pipe_gap = 145
         gravity = 0.6
 
-    elif selected_mode == "progresīvs":
-        pipe_speed = 3 + score // 5
-        pipe_speed = min(pipe_speed, 7)
-
-        pipe_gap = 210 - score * 3
-        pipe_gap = max(pipe_gap, 135)
-
-        gravity = 0.45 + score * 0.01
-        gravity = min(gravity, 0.65)
+    elif selected_mode == "Progressive":
+        pipe_speed = min(3 + score // 5, 7)
+        pipe_gap = max(210 - score * 3, 135)
+        gravity = min(0.45 + score * 0.01, 0.65)
 
 
 def reset_game():
@@ -117,7 +116,25 @@ def create_pipe(x):
     pipes.append({"x": x, "gap_y": gap_y, "passed": False})
 
 
+def draw_rounded_rect(x, y, w, h, color, radius=18, shadow=True):
+    if shadow:
+        shadow_surface = pygame.Surface((w, h), pygame.SRCALPHA)
+        pygame.draw.rect(shadow_surface, (0, 0, 0, 45), (0, 0, w, h), border_radius=radius)
+        screen.blit(shadow_surface, (x + 5, y + 6))
+
+    pygame.draw.rect(screen, color, (x, y, w, h), border_radius=radius)
+
+
+def draw_cloud(x, y):
+    pygame.draw.circle(screen, WHITE, (x, y), 20)
+    pygame.draw.circle(screen, WHITE, (x + 24, y - 13), 28)
+    pygame.draw.circle(screen, WHITE, (x + 55, y), 22)
+    pygame.draw.ellipse(screen, WHITE, (x - 8, y - 5, 78, 34))
+
+
 def draw_gradient_background():
+    global ground_scroll
+
     for y in range(HEIGHT):
         ratio = y / HEIGHT
         r = int(SKY_TOP[0] * (1 - ratio) + SKY_BOTTOM[0] * ratio)
@@ -125,42 +142,45 @@ def draw_gradient_background():
         b = int(SKY_TOP[2] * (1 - ratio) + SKY_BOTTOM[2] * ratio)
         pygame.draw.line(screen, (r, g, b), (0, y), (WIDTH, y))
 
-    pygame.draw.circle(screen, (255, 245, 150), (410, 85), 42)
+    pygame.draw.circle(screen, (255, 245, 165), (410, 85), 43)
+    pygame.draw.circle(screen, (255, 235, 120), (410, 85), 52, 3)
 
-    draw_cloud(70, 95)
-    draw_cloud(300, 165)
-    draw_cloud(150, 250)
+    draw_cloud(65, 105)
+    draw_cloud(315, 170)
+    draw_cloud(150, 260)
 
-    pygame.draw.rect(screen, GREEN, (0, HEIGHT - 80, WIDTH, 80))
-    pygame.draw.rect(screen, DARK_GREEN, (0, HEIGHT - 88, WIDTH, 10))
+    if selected_mode and started and not game_over:
+        ground_scroll -= pipe_speed
+        if ground_scroll <= -40:
+            ground_scroll = 0
 
-    for x in range(0, WIDTH, 35):
-        pygame.draw.line(screen, (35, 150, 65), (x, HEIGHT - 78), (x + 15, HEIGHT - 105), 3)
+    # HD grass base
+    pygame.draw.rect(screen, (65, 185, 82), (0, HEIGHT - 95, WIDTH, 95))
+    pygame.draw.rect(screen, DARK_GREEN, (0, HEIGHT - 105, WIDTH, 14))
 
+    # layered grass blades
+    for x in range(-40, WIDTH + 40, 20):
+        moving_x = x + ground_scroll
 
-def draw_cloud(x, y):
-    pygame.draw.circle(screen, WHITE, (x, y), 22)
-    pygame.draw.circle(screen, WHITE, (x + 25, y - 12), 28)
-    pygame.draw.circle(screen, WHITE, (x + 55, y), 22)
-    pygame.draw.ellipse(screen, WHITE, (x - 5, y - 5, 75, 32))
+        pygame.draw.line(screen, GRASS_DARK, (moving_x, HEIGHT - 70), (moving_x + 8, HEIGHT - 108), 3)
+        pygame.draw.line(screen, GRASS_LIGHT, (moving_x + 6, HEIGHT - 72), (moving_x + 18, HEIGHT - 102), 2)
+        pygame.draw.line(screen, (40, 145, 55), (moving_x + 14, HEIGHT - 68), (moving_x + 25, HEIGHT - 100), 3)
+
+    # grass details / flowers
+    for x in range(-40, WIDTH + 40, 40):
+        moving_x = x + ground_scroll
+        pygame.draw.circle(screen, (45, 150, 65), (moving_x + 10, HEIGHT - 38), 5)
+        pygame.draw.circle(screen, (90, 210, 95), (moving_x + 28, HEIGHT - 55), 4)
+
+    # darker soil stripe
+    pygame.draw.rect(screen, (50, 145, 65), (0, HEIGHT - 22, WIDTH, 22))
 
 
 def draw_bird():
-    pygame.draw.ellipse(screen, (230, 170, 40), (bird_x - 21, int(bird_y) + 18, 44, 10))
-
-    pygame.draw.circle(screen, YELLOW, (bird_x, int(bird_y)), bird_radius)
-    pygame.draw.circle(screen, (255, 235, 110), (bird_x - 7, int(bird_y) - 7), 9)
-
-    pygame.draw.ellipse(screen, ORANGE, (bird_x - 22, int(bird_y) + 3, 28, 16))
-
-    pygame.draw.circle(screen, WHITE, (bird_x + 9, int(bird_y) - 8), 6)
-    pygame.draw.circle(screen, BLACK, (bird_x + 11, int(bird_y) - 8), 3)
-
-    pygame.draw.polygon(screen, ORANGE, [
-        (bird_x + 18, int(bird_y)),
-        (bird_x + 38, int(bird_y) - 8),
-        (bird_x + 38, int(bird_y) + 8)
-    ])
+    angle = max(min(-bird_velocity * 3, 25), -35)
+    rotated_bird = pygame.transform.rotate(bird_img, angle)
+    rect = rotated_bird.get_rect(center=(bird_x, int(bird_y)))
+    screen.blit(rotated_bird, rect.topleft)
 
 
 def draw_pipes():
@@ -177,8 +197,8 @@ def draw_pipes():
         pygame.draw.rect(screen, PIPE_LIGHT, (x + 10, 0, 12, top_h))
         pygame.draw.rect(screen, PIPE_LIGHT, (x + 10, bottom_y, 12, HEIGHT))
 
-        pygame.draw.rect(screen, DARK_GREEN, (x - 6, top_h - 25, pipe_width + 12, 25), border_radius=6)
-        pygame.draw.rect(screen, DARK_GREEN, (x - 6, bottom_y, pipe_width + 12, 25), border_radius=6)
+        pygame.draw.rect(screen, DARK_GREEN, (x - 7, top_h - 26, pipe_width + 14, 26), border_radius=7)
+        pygame.draw.rect(screen, DARK_GREEN, (x - 7, bottom_y, pipe_width + 14, 26), border_radius=7)
 
 
 def move_pipes():
@@ -205,7 +225,7 @@ def move_pipes():
 
 
 def check_collision():
-    if bird_y - bird_radius <= 0 or bird_y + bird_radius >= HEIGHT - 80:
+    if bird_y - bird_radius <= 0 or bird_y + bird_radius >= HEIGHT - 95:
         return True
 
     bird_rect = pygame.Rect(
@@ -228,88 +248,87 @@ def check_collision():
     return False
 
 
-def draw_panel(x, y, w, h, color=CARD):
-    pygame.draw.rect(screen, (0, 0, 0, 40), (x + 4, y + 5, w, h), border_radius=18)
-    pygame.draw.rect(screen, color, (x, y, w, h), border_radius=18)
-
-
 def draw_score():
-    score_box_w = 110
-    draw_panel(WIDTH // 2 - score_box_w // 2, 22, score_box_w, 65, WHITE)
+    draw_rounded_rect(WIDTH // 2 - 58, 22, 116, 66, WHITE)
     score_text = font_big.render(str(score), True, DARK_BLUE)
     screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 28))
 
-    draw_panel(12, 15, 160, 62, WHITE)
-    screen.blit(font_tiny.render("Labākais rezultāts", True, DARK_BLUE), (25, 22))
-    screen.blit(font_medium.render(str(high_score), True, DARK_BLUE), (25, 42))
+    draw_rounded_rect(12, 15, 158, 62, WHITE)
+    screen.blit(font_tiny.render("Best Score", True, DARK_BLUE), (26, 22))
+    screen.blit(font_medium.render(str(high_score), True, DARK_BLUE), (26, 42))
 
     if selected_mode:
-        draw_panel(325, 15, 160, 62, WHITE)
-        screen.blit(font_tiny.render("Režīms", True, DARK_BLUE), (340, 22))
-        screen.blit(font_small.render(selected_mode.capitalize(), True, DARK_BLUE), (340, 47))
+        draw_rounded_rect(326, 15, 160, 62, WHITE)
+        screen.blit(font_tiny.render("Mode", True, DARK_BLUE), (342, 22))
+        screen.blit(font_small.render(selected_mode, True, DARK_BLUE), (342, 47))
 
 
 def draw_menu():
-    title = font_title.render("Lidojošais meža putns", True, DARK_BLUE)
-    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 95))
+    draw_rounded_rect(35, 70, 430, 92, WHITE)
 
-    subtitle = font_small.render("Izvēlies grūtības režīmu", True, DARK_BLUE)
-    screen.blit(subtitle, (WIDTH // 2 - subtitle.get_width() // 2, 145))
+    title = font_title.render("Flappy Forest Bird", True, DARK_BLUE)
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 87))
+
+    subtitle = font_small.render("Choose your difficulty mode", True, (70, 90, 105))
+    screen.blit(subtitle, (WIDTH // 2 - subtitle.get_width() // 2, 132))
 
     modes = [
-        ("1", "Viegls", "Lielāka atstarpe, lēnākas caurules"),
-        ("2", "Vidējs", "Standarta spēles režīms"),
-        ("3", "Grūts", "Ātrāk un mazāka atstarpe"),
-        ("4", "Progresīvs", "Sāk viegli, kļūst arvien grūtāk")
+        ("1", "Easy", "Wide gaps and slower pipes", (86, 190, 105)),
+        ("2", "Medium", "Balanced gameplay", (65, 135, 225)),
+        ("3", "Hard", "Faster pipes and smaller gaps", (230, 105, 70)),
+        ("4", "Progressive", "Starts easy, gets harder over time", (150, 95, 220))
     ]
 
     y = 205
-    for key, name, desc in modes:
-        draw_panel(55, y, 390, 78, WHITE)
+    for key, name, desc, color in modes:
+        draw_rounded_rect(45, y, 410, 78, WHITE)
 
-        pygame.draw.circle(screen, DARK_BLUE, (90, y + 39), 24)
+        pygame.draw.circle(screen, color, (88, y + 39), 25)
         key_text = font_medium.render(key, True, WHITE)
-        screen.blit(key_text, (90 - key_text.get_width() // 2, y + 24))
+        screen.blit(key_text, (88 - key_text.get_width() // 2, y + 24))
 
         name_text = font_medium.render(name, True, DARK_BLUE)
-        desc_text = font_tiny.render(desc, True, (80, 95, 105))
+        desc_text = font_tiny.render(desc, True, (82, 96, 110))
 
-        screen.blit(name_text, (130, y + 14))
-        screen.blit(desc_text, (130, y + 47))
+        screen.blit(name_text, (130, y + 13))
+        screen.blit(desc_text, (130, y + 48))
 
         y += 90
 
-    footer = font_tiny.render("Vadība: SPACE - lidot, R - restartēt, M - izvēlne", True, DARK_BLUE)
-    screen.blit(footer, (WIDTH // 2 - footer.get_width() // 2, 645))
+    draw_rounded_rect(50, 628, 400, 42, SOFT_BLUE, radius=16)
+    footer = font_tiny.render("Controls: SPACE = fly   |   R = restart   |   M = menu", True, DARK_BLUE)
+    screen.blit(footer, (WIDTH // 2 - footer.get_width() // 2, 641))
 
 
 def draw_start_hint():
-    draw_panel(85, 295, 330, 70, WHITE)
-    text = font_small.render("Spied SPACE, lai sāktu", True, DARK_BLUE)
-    screen.blit(text, (WIDTH // 2 - text.get_width() // 2, 318))
+    draw_rounded_rect(85, 296, 330, 72, WHITE)
+    text = font_small.render("Press SPACE to start flying", True, DARK_BLUE)
+    screen.blit(text, (WIDTH // 2 - text.get_width() // 2, 321))
 
 
 def draw_game_over():
     overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 120))
+    overlay.fill((0, 0, 0, 125))
     screen.blit(overlay, (0, 0))
 
-    draw_panel(55, 220, 390, 250, WHITE)
+    draw_rounded_rect(52, 212, 396, 270, WHITE)
 
-    title = font_big.render("Spēle beigusies", True, RED)
-    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 245))
+    title = font_big.render("Game Over", True, RED)
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 238))
 
-    points = font_medium.render(f"Punkti: {score}", True, DARK_BLUE)
-    best = font_medium.render(f"Labākais: {high_score}", True, DARK_BLUE)
+    pygame.draw.line(screen, SOFT_BLUE, (95, 300), (405, 300), 3)
 
-    screen.blit(points, (WIDTH // 2 - points.get_width() // 2, 315))
-    screen.blit(best, (WIDTH // 2 - best.get_width() // 2, 355))
+    points = font_medium.render(f"Score: {score}", True, DARK_BLUE)
+    best = font_medium.render(f"Best Score: {high_score}", True, DARK_BLUE)
 
-    restart = font_small.render("R - sākt no jauna", True, DARK_BLUE)
-    menu = font_small.render("M - mainīt režīmu", True, DARK_BLUE)
+    screen.blit(points, (WIDTH // 2 - points.get_width() // 2, 323))
+    screen.blit(best, (WIDTH // 2 - best.get_width() // 2, 363))
 
-    screen.blit(restart, (WIDTH // 2 - restart.get_width() // 2, 405))
-    screen.blit(menu, (WIDTH // 2 - menu.get_width() // 2, 435))
+    restart = font_small.render("Press R to restart", True, DARK_BLUE)
+    menu = font_small.render("Press M to change mode", True, DARK_BLUE)
+
+    screen.blit(restart, (WIDTH // 2 - restart.get_width() // 2, 420))
+    screen.blit(menu, (WIDTH // 2 - menu.get_width() // 2, 448))
 
 
 high_score = load_high_score()
@@ -325,16 +344,16 @@ while running:
         if event.type == pygame.KEYDOWN:
             if selected_mode is None:
                 if event.key == pygame.K_1:
-                    selected_mode = "viegls"
+                    selected_mode = "Easy"
                     reset_game()
                 elif event.key == pygame.K_2:
-                    selected_mode = "vidējs"
+                    selected_mode = "Medium"
                     reset_game()
                 elif event.key == pygame.K_3:
-                    selected_mode = "grūts"
+                    selected_mode = "Hard"
                     reset_game()
                 elif event.key == pygame.K_4:
-                    selected_mode = "progresīvs"
+                    selected_mode = "Progressive"
                     reset_game()
             else:
                 if event.key == pygame.K_SPACE and not game_over:
