@@ -1,9 +1,9 @@
 import pygame
 import random
 import sys
+import os
 
 pygame.init()
-
 
 WIDTH = 500
 HEIGHT = 700
@@ -12,7 +12,6 @@ pygame.display.set_caption("Flappy Forest Bird")
 
 clock = pygame.time.Clock()
 FPS = 60
-
 
 SKY = (135, 206, 235)
 GREEN = (60, 180, 75)
@@ -23,10 +22,11 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (220, 40, 40)
 
-font_big = pygame.font.SysFont("arial", 48, bold=True)
-font_medium = pygame.font.SysFont("arial", 30, bold=True)
-font_small = pygame.font.SysFont("arial", 22)
+font_big = pygame.font.SysFont("arial", 46, bold=True)
+font_medium = pygame.font.SysFont("arial", 28, bold=True)
+font_small = pygame.font.SysFont("arial", 21)
 
+HIGH_SCORE_FILE = "highscore.txt"
 
 bird_x = 100
 bird_y = HEIGHT // 2
@@ -35,26 +35,76 @@ bird_velocity = 0
 gravity = 0.5
 jump_strength = -8
 
-
 pipe_width = 80
 pipe_gap = 180
 pipe_speed = 4
 pipes = []
 
-
 score = 0
+high_score = 0
 game_over = False
+started = False
+selected_mode = None
+
+
+def load_high_score():
+    if os.path.exists(HIGH_SCORE_FILE):
+        with open(HIGH_SCORE_FILE, "r") as file:
+            try:
+                return int(file.read())
+            except:
+                return 0
+    return 0
+
+
+def save_high_score():
+    with open(HIGH_SCORE_FILE, "w") as file:
+        file.write(str(high_score))
+
+
+def apply_difficulty():
+    global pipe_speed, pipe_gap, gravity
+
+    if selected_mode == "easy":
+        pipe_speed = 3
+        pipe_gap = 210
+        gravity = 0.45
+
+    elif selected_mode == "medium":
+        pipe_speed = 4
+        pipe_gap = 180
+        gravity = 0.5
+
+    elif selected_mode == "hard":
+        pipe_speed = 5
+        pipe_gap = 145
+        gravity = 0.6
+
+    elif selected_mode == "progressive":
+        pipe_speed = 3 + score // 5
+        if pipe_speed > 7:
+            pipe_speed = 7
+
+        pipe_gap = 210 - score * 3
+        if pipe_gap < 135:
+            pipe_gap = 135
+
+        gravity = 0.45 + score * 0.01
+        if gravity > 0.65:
+            gravity = 0.65
 
 
 def reset_game():
-    global bird_y, bird_velocity, pipes, score, game_over
+    global bird_y, bird_velocity, pipes, score, game_over, started
 
     bird_y = HEIGHT // 2
     bird_velocity = 0
     pipes = []
     score = 0
     game_over = False
+    started = False
 
+    apply_difficulty()
     create_pipe(WIDTH + 200)
 
 
@@ -73,32 +123,24 @@ def create_pipe(x):
 def draw_background():
     screen.fill(SKY)
 
-
     pygame.draw.circle(screen, (255, 240, 120), (420, 80), 45)
 
-
     pygame.draw.rect(screen, GREEN, (0, HEIGHT - 80, WIDTH, 80))
-
-    
     pygame.draw.rect(screen, DARK_GREEN, (0, HEIGHT - 85, WIDTH, 8))
 
 
 def draw_bird():
-   
     pygame.draw.circle(screen, YELLOW, (bird_x, int(bird_y)), bird_radius)
 
-  
     pygame.draw.ellipse(
         screen,
         ORANGE,
         (bird_x - 18, int(bird_y) + 2, 25, 15)
     )
 
-  
     pygame.draw.circle(screen, WHITE, (bird_x + 8, int(bird_y) - 7), 6)
     pygame.draw.circle(screen, BLACK, (bird_x + 10, int(bird_y) - 7), 3)
 
-   
     pygame.draw.polygon(
         screen,
         ORANGE,
@@ -115,14 +157,12 @@ def draw_pipes():
         x = pipe["x"]
         gap_y = pipe["gap_y"]
 
-       
         pygame.draw.rect(
             screen,
             DARK_GREEN,
             (x, 0, pipe_width, gap_y - pipe_gap // 2)
         )
 
-      
         pygame.draw.rect(
             screen,
             DARK_GREEN,
@@ -143,7 +183,9 @@ def draw_pipes():
 
 
 def move_pipes():
-    global score
+    global score, high_score
+
+    apply_difficulty()
 
     for pipe in pipes:
         pipe["x"] -= pipe_speed
@@ -152,7 +194,10 @@ def move_pipes():
             score += 1
             pipe["passed"] = True
 
-   
+            if score > high_score:
+                high_score = score
+                save_high_score()
+
     if pipes and pipes[0]["x"] + pipe_width < 0:
         pipes.pop(0)
 
@@ -161,7 +206,6 @@ def move_pipes():
 
 
 def check_collision():
-   
     if bird_y - bird_radius <= 0:
         return True
 
@@ -200,37 +244,65 @@ def check_collision():
 
 
 def draw_score():
-    text = font_big.render(str(score), True, WHITE)
-    screen.blit(text, (WIDTH // 2 - text.get_width() // 2, 30))
+    score_text = font_big.render(str(score), True, WHITE)
+    screen.blit(score_text, (WIDTH // 2 - score_text.get_width() // 2, 30))
+
+    high_text = font_small.render(f"High Score: {high_score}", True, WHITE)
+    screen.blit(high_text, (15, 15))
+
+    if selected_mode:
+        mode_text = font_small.render(f"Mode: {selected_mode.upper()}", True, WHITE)
+        screen.blit(mode_text, (15, 45))
+
+
+def draw_mode_menu():
+    title = font_big.render("Flappy Forest Bird", True, WHITE)
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 140))
+
+    text1 = font_medium.render("Izvēlies grūtības režīmu:", True, WHITE)
+    screen.blit(text1, (WIDTH // 2 - text1.get_width() // 2, 220))
+
+    options = [
+        "1 - Easy",
+        "2 - Medium",
+        "3 - Hard",
+        "4 - Progressive"
+    ]
+
+    y = 280
+    for option in options:
+        text = font_medium.render(option, True, WHITE)
+        screen.blit(text, (WIDTH // 2 - text.get_width() // 2, y))
+        y += 45
 
 
 def draw_start_text():
-    title = font_medium.render("Flappy Forest Bird", True, WHITE)
-    instruction = font_small.render("Spied SPACE, lai lidotu", True, WHITE)
-
-    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 250))
+    instruction = font_small.render("Spied SPACE, lai sāktu lidot", True, WHITE)
     screen.blit(instruction, (WIDTH // 2 - instruction.get_width() // 2, 300))
 
 
 def draw_game_over():
     overlay = pygame.Surface((WIDTH, HEIGHT))
-    overlay.set_alpha(160)
+    overlay.set_alpha(170)
     overlay.fill(BLACK)
     screen.blit(overlay, (0, 0))
 
     title = font_big.render("SPĒLE BEIGUSIES", True, RED)
     points = font_medium.render(f"Punkti: {score}", True, WHITE)
+    best = font_medium.render(f"High Score: {high_score}", True, WHITE)
     restart = font_small.render("Spied R, lai sāktu no jauna", True, WHITE)
+    menu = font_small.render("Spied M, lai mainītu režīmu", True, WHITE)
 
-    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 250))
-    screen.blit(points, (WIDTH // 2 - points.get_width() // 2, 320))
-    screen.blit(restart, (WIDTH // 2 - restart.get_width() // 2, 370))
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 230))
+    screen.blit(points, (WIDTH // 2 - points.get_width() // 2, 300))
+    screen.blit(best, (WIDTH // 2 - best.get_width() // 2, 340))
+    screen.blit(restart, (WIDTH // 2 - restart.get_width() // 2, 395))
+    screen.blit(menu, (WIDTH // 2 - menu.get_width() // 2, 430))
 
 
-reset_game()
+high_score = load_high_score()
 
 running = True
-started = False
 
 while running:
     clock.tick(FPS)
@@ -240,15 +312,38 @@ while running:
             running = False
 
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE and not game_over:
-                started = True
-                bird_velocity = jump_strength
 
-            if event.key == pygame.K_r and game_over:
-                reset_game()
-                started = False
+            if selected_mode is None:
+                if event.key == pygame.K_1:
+                    selected_mode = "easy"
+                    reset_game()
 
-    if started and not game_over:
+                elif event.key == pygame.K_2:
+                    selected_mode = "medium"
+                    reset_game()
+
+                elif event.key == pygame.K_3:
+                    selected_mode = "hard"
+                    reset_game()
+
+                elif event.key == pygame.K_4:
+                    selected_mode = "progressive"
+                    reset_game()
+
+            else:
+                if event.key == pygame.K_SPACE and not game_over:
+                    started = True
+                    bird_velocity = jump_strength
+
+                if event.key == pygame.K_r and game_over:
+                    reset_game()
+
+                if event.key == pygame.K_m and game_over:
+                    selected_mode = None
+                    game_over = False
+                    started = False
+
+    if selected_mode is not None and started and not game_over:
         bird_velocity += gravity
         bird_y += bird_velocity
 
@@ -258,15 +353,19 @@ while running:
             game_over = True
 
     draw_background()
-    draw_pipes()
-    draw_bird()
-    draw_score()
 
-    if not started and not game_over:
-        draw_start_text()
+    if selected_mode is None:
+        draw_mode_menu()
+    else:
+        draw_pipes()
+        draw_bird()
+        draw_score()
 
-    if game_over:
-        draw_game_over()
+        if not started and not game_over:
+            draw_start_text()
+
+        if game_over:
+            draw_game_over()
 
     pygame.display.update()
 
